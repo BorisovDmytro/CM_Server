@@ -31,9 +31,9 @@ void CMServer::start(QString host, int port)
 
   mServer = new QTcpServer(this);
   if (! mServer->listen(QHostAddress(host), port)) {
-    mLoger->error("Cant run server on " + host + ":" + QString::number(port));
-    return;
-  }
+      mLoger->error("Cant run server on " + host + ":" + QString::number(port));
+      return;
+    }
 
   connect(mServer, SIGNAL(newConnection()),
           this,    SLOT(newConnection()));
@@ -55,7 +55,6 @@ void CMServer::start(const CMServerSetting &setting, const DbConnectedSetting &d
 
 void CMServer::newConnection()
 {
-  mLoger->info("New connection done");
   QTcpSocket     *socket = mServer->nextPendingConnection();
   ClientInstence *client = new ClientInstence(socket);
 
@@ -79,19 +78,16 @@ void CMServer::disconnect()
     ClientInstence *client = mConnections.value(socket, NULL);
 
     if (client) {
-      if ( client->getAccount() != NULL) {
-          mClients.remove(client->getAccount()->name());
-        }
-      mConnections.remove(socket);
-
-      client->disconect();
-
-      delete client;
-     }
-
+        if ( client->getAccount() != NULL) {
+            mClients.remove(client->getAccount()->name());
+          }
+        mConnections.remove(socket);
+        client->disconect();
+        delete client;
+      }
     socket->deleteLater();
   } catch(...) {
-
+    qDebug() << "Error disconect";
   }
 }
 // TODO CREATE COMMAND FACTORY
@@ -105,7 +101,7 @@ void CMServer::readyRead()
   ClientInstence *client = mConnections.value(socket, NULL);
 
   if (client == NULL)
-      return;
+    return;
 
   QDataStream stream(socket);
   int type = MessageType::Undefined;
@@ -124,7 +120,6 @@ void CMServer::readyRead()
         m_nNextBlockSize = 0;
 
         stream >> type;
-        qDebug() << "readyRead:" << type << " " << socket->bytesAvailable() ;
         switch (type) {
           case MessageType::Auth: {
               QString name;
@@ -132,7 +127,8 @@ void CMServer::readyRead()
 
               stream >> name;
               stream >> pass;
-              qDebug() << "Auth:" << name;
+              bool isValid = false;
+
               QByteArray arr;
               QDataStream out(&arr, QIODevice::WriteOnly);
               out << quint16(0);
@@ -140,20 +136,21 @@ void CMServer::readyRead()
 
               if (mClients.value(name, NULL) == NULL) {
                   Account* acc = mAccounts.value(name, NULL);
-                  if (acc != NULL && pass == acc->password()) {
-                      client->setAccount(acc);
-                      mClients.insert(name, client);
-                      out << true;
-                    } else {
-                      out << false;
+                  if (acc != NULL) {
+                      if (pass == acc->password()) {
+                          client->setAccount(acc);
+                          mClients.insert(name, client);
+                          isValid = true;
+                        }
                     }
-
-                } else {
-                  out << false;
                 }
+
+              out << isValid;
               out.device()->seek(0);
               out << quint16(arr.size() - sizeof(quint16));
               client->sendData(arr);
+              if (!isValid)
+                socket->close();
             } break;
 
           case MessageType::CallFrame: {
@@ -297,18 +294,16 @@ void CMServer::readyRead()
             break;
           }
       }
-    qDebug () << "readyRead end :" << socket->bytesAvailable();
   } catch(...) {
-    qDebug () << "Error read package";
+    qDebug () << "!!! Error read package";
   }
 }
 
 void CMServer::updateAccountCache()
 {
   mAccounts.clear();
-  QList<Account*> accoutn = mDbAccountCtrl.getAll();
-
-  foreach (Account* acc, accoutn) {
+  QList<Account*> accaunts = mDbAccountCtrl.getAll();
+  foreach (Account* acc, accaunts) {
       mAccounts.insert(acc->name(), acc);
     }
 }

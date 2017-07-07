@@ -71,7 +71,7 @@ void CallEntry::sendCallDataToEntry(ClientInstence *sender, QDataStream &stream)
   out << quint16(arr.size() - sizeof(quint16));
 
   foreach (ClientInstence *user, mUsers) {
-    if (sender == user) continue;
+    //if (sender == user) continue;
     user->get()->write(arr);
   }
 }

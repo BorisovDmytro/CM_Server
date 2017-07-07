@@ -37,5 +37,12 @@ int main(int argc, char *argv[])
   CMServer server(pLoger);
   server.start(setting, dbSetting);
 
-  return a.exec();
+  int extCode = 0;
+  try {
+    extCode = a.exec();
+  } catch(...) {
+    qDebug() << "!!! Error exec server\n";
+  }
+
+  return extCode;
 }
