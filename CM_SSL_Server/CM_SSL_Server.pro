@@ -21,7 +21,8 @@ SOURCES += main.cpp \
     entity/account.cpp \
     entity/messageinformation.cpp \
     log/consoledebugloger.cpp \
-    setting/cmserversetting.cpp
+    setting/cmserversetting.cpp \
+    crypto/diffhelmanprotocol.cpp
 
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which as been marked deprecated (the exact warnings
@@ -48,7 +49,8 @@ HEADERS += \
     entity/messageinformation.h \
     log/consoledebugloger.h \
     log/icmloger.h \
-    setting/cmserversetting.h
+    setting/cmserversetting.h \
+    crypto/diffhelmanprotocol.h
 
 RESOURCES += \
     res.qrc

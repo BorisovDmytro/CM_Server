@@ -210,7 +210,11 @@ void CMServer::readyRead(QByteArray in)
         } break;
       case MessageType::StartCall: {
           QString recipient;
+          qint64 gen, mod , priv;
           stream >> recipient;
+          stream >> gen;
+          stream >> mod;
+          stream >> priv;
 
           QByteArray arr;
           QDataStream out(&arr, QIODevice::WriteOnly);
@@ -219,6 +223,9 @@ void CMServer::readyRead(QByteArray in)
 
           out << (int) MessageType::StartCall;
           out << client->getAccount()->name();
+          out << gen;
+          out << mod;
+          out << priv;
 
           ClientInstence* rec = mClients.value(recipient, NULL);
           if (rec != NULL) {
@@ -241,13 +248,17 @@ void CMServer::readyRead(QByteArray in)
           CallEntry *entry = client->getCall();
           if (entry != NULL) {
               QByteArray arr;
+              quint64 priv;
+
+              stream >> priv;
+
               QDataStream out(&arr, QIODevice::WriteOnly);
               out.setVersion(QDataStream::Qt_5_9);
               out << quint16(0);
 
               out << (int) MessageType::SuccessCall;
               out << client->getAccount()->name();
-
+              out << priv;
               out.device()->seek(0);
               out << quint16(arr.size() - sizeof(quint16));
 
