@@ -9,6 +9,7 @@
 #include "log/icmloger.h"
 #include "log/consoledebugloger.h"
 
+#include <iostream>
 
 CMServer::CMServer(ICMLoger *loger, QObject *parent)
   : QObject(parent)
@@ -33,21 +34,6 @@ void CMServer::start(QString host, int port)
   mServer = new QWebSocketServer(QStringLiteral("SSL Echo Server"),
                                  QWebSocketServer::NonSecureMode,
                                  this);
-
-  /*QSslConfiguration sslConfiguration;
-  QFile certFile(QStringLiteral(":/keys/localhost.cert"));
-  QFile keyFile(QStringLiteral(":/keys/localhost.key"));
-  certFile.open(QIODevice::ReadOnly);
-  keyFile.open(QIODevice::ReadOnly);
-  QSslCertificate certificate(&certFile, QSsl::Pem);
-  QSslKey sslKey(&keyFile, QSsl::Rsa, QSsl::Pem);
-  certFile.close();
-  keyFile.close();
-  sslConfiguration.setPeerVerifyMode(QSslSocket::VerifyNone);
-  sslConfiguration.setLocalCertificate(certificate);
-  sslConfiguration.setPrivateKey(sslKey);
-  sslConfiguration.setProtocol(QSsl::TlsV1SslV3);
-  mServer->setSslConfiguration(sslConfiguration);*/
 
   if (! mServer->listen(QHostAddress(host), port)) {
       mLoger->error("Cant run server on " + host + ":" + QString::number(port));
@@ -135,9 +121,16 @@ void CMServer::readyRead(QByteArray in)
       case MessageType::Auth: {
           QString name;
           QString pass;
+          qint64 gen = 0, mod = 0, pub = 0;
+          qint64 prvt = 0;
 
           stream >> name;
           stream >> pass;
+
+          stream >> gen;
+          stream >> mod;
+          stream >> pub;
+
           bool isValid = false;
 
           QByteArray arr;
@@ -150,6 +143,7 @@ void CMServer::readyRead(QByteArray in)
               if (acc != NULL) {
                   if (pass == acc->password()) {
                       client->setAccount(acc);
+                      prvt = client->setKeyData(gen, mod, pub);
                       mClients.insert(name, client);
                       isValid = true;
                     }
@@ -157,6 +151,9 @@ void CMServer::readyRead(QByteArray in)
             }
 
           out << isValid;
+          if (isValid) {
+              out << prvt;
+            }
           out.device()->seek(0);
           out << quint16(arr.size() - sizeof(quint16));
           client->sendData(arr);
@@ -179,14 +176,22 @@ void CMServer::readyRead(QByteArray in)
               out.setVersion(QDataStream::Qt_5_9);
               out << quint16(0);
 
+              ByteArray encOrg = msg.getMessage();
+              ByteArray dec;
+              Aes256::decrypt(client->getKey(), encOrg, dec);
+              ByteArray enc;
+              Aes256::encrypt(rec->getKey(), dec, enc);
+
+              msg.setMessage(enc);
+
               out << (int) MessageType::TextMessage;
               msg.saveToStream(out);
               out.device()->seek(0);
               out << quint16(arr.size() - sizeof(quint16));
-
               rec->sendData(arr);
             } else {
               // TODO SAVE HISTORY
+              qDebug() << "OFFLINE USER";
             }
         } break;
       case MessageType::GetUserList: {
