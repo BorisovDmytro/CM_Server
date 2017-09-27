@@ -25,7 +25,7 @@
 #include <QSslCertificate>
 #include <QSslKey>
 #include <QFile>
-
+#include "aes/aes256.hpp"
 
 typedef QMap<QString, Account*>             CacheAccount;
 typedef QMap<QWebSocket *,ClientInstence *> ConenctionMap;

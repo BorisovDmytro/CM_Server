@@ -2,12 +2,12 @@
 
 #include <QDebug>
 
-long DiffHelmanProtocol::getModule() const
+qint64 DiffHelmanProtocol::getModule() const
 {
   return module;
 }
 
-long DiffHelmanProtocol::getGenerator() const
+qint64 DiffHelmanProtocol::getGenerator() const
 {
   return generator;
 }
@@ -22,35 +22,35 @@ DiffHelmanProtocol::DiffHelmanProtocol(bool generate)
   privat = getRandomInt(2, 8);
 }
 
-long DiffHelmanProtocol::getKey()
+qint64 DiffHelmanProtocol::getKey()
 {
   return this->key;
 }
 
-void DiffHelmanProtocol::set(long generator, long module)
+void DiffHelmanProtocol::set(qint64 generator, qint64 module)
 {
   this->generator = generator;
   this->module    = module;
 }
 
-long DiffHelmanProtocol::getPrivate()
+qint64 DiffHelmanProtocol::getPrivate()
 {
-  return (long)pow(generator, privat) % module;
+  return (qint64)pow(generator, privat) % module;
 }
 
-void DiffHelmanProtocol::setPublic(const long pub)
+void DiffHelmanProtocol::setPublic(qint64 pub)
 {
-  key = fabs(((long)pow(pub, privat) % module));
+  key = fabs(((qint64)pow(pub, privat) % module));
 }
 
-long DiffHelmanProtocol::getRandomInt(const long min, const long max)
+qint64 DiffHelmanProtocol::getRandomInt(const qint64 min, const qint64 max)
 {
   QTime midnight(0,0,0);
   qsrand(midnight.secsTo(QTime::currentTime()));
   return fabs(floor(qrand() * (max - min +1)) + min);
 }
 
-long DiffHelmanProtocol::getGenerator(const long gen)
+qint64 DiffHelmanProtocol::getGenerator(const qint64 gen)
 {
   return 2 * gen + 2;
 }

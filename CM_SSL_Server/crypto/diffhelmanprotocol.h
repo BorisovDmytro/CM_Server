@@ -7,26 +7,26 @@
 class DiffHelmanProtocol
 {
 private:
-  long generator;
-  long module;
-  long privat;
-  long key;
+  qint64 generator;
+  qint64 module;
+  qint64 privat;
+  qint64 key;
 public:
   DiffHelmanProtocol(bool generate = false);
 
-  long getPrivate();
-  void setPublic(const long pub);
+  qint64 getPrivate();
+  void setPublic(qint64 pub);
 
-  long getKey();
-  void set(long generator, long module);
+  qint64 getKey();
+  void set(qint64 generator, qint64 module);
 
 
-  long getModule() const;
-  long getGenerator() const;
+  qint64 getModule() const;
+  qint64 getGenerator() const;
 
 private:
-  long getRandomInt(const long min, const long max);
-  long getGenerator(const long gen);
+  qint64 getRandomInt(const qint64 min, const qint64 max);
+  qint64 getGenerator(const qint64 gen);
 };
 
 #endif // DIFFHELMANPROTOCOL_H

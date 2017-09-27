@@ -9,6 +9,7 @@
 #include "log/icmloger.h"
 #include "log/consoledebugloger.h"
 
+#include <iostream>
 
 CMServer::CMServer(ICMLoger *loger, QObject *parent)
   : QObject(parent)
@@ -16,7 +17,6 @@ CMServer::CMServer(ICMLoger *loger, QObject *parent)
   mLoger  = (loger != NULL) ? loger : new ConsoleDebugLoger();
   mServer = NULL;
   m_nNextBlockSize = 0;
-  isEcho = false;
 }
 
 CMServer::~CMServer()
@@ -26,9 +26,8 @@ CMServer::~CMServer()
   delete mLoger;
 }
 
-void CMServer::start(QString host, int port, bool isEcho)
+void CMServer::start(QString host, int port)
 {
-  this->isEcho = isEcho;
   if (mServer != NULL)
     delete mServer;
 
@@ -37,9 +36,9 @@ void CMServer::start(QString host, int port, bool isEcho)
                                  this);
 
   if (! mServer->listen(QHostAddress(host), port)) {
-    mLoger->error("Cant run server on " + host + ":" + QString::number(port));
-    return;
-  }
+      mLoger->error("Cant run server on " + host + ":" + QString::number(port));
+      return;
+    }
 
   connect(mServer, SIGNAL(newConnection()),
           this,    SLOT(newConnection()));
@@ -54,12 +53,12 @@ void CMServer::start(const CMServerSetting &setting, const DbConnectedSetting &d
 {
   mDbConnection.init(dbSetting);
   if (!mDbConnection.connect()) {
-    qDebug() << "Error connect to database";
-  }
+      qDebug() << "Error connect to database";
+    }
 
   mDbAccountCtrl.init(&mDbConnection);
   updateAccountCache();
-  start(setting.host(), setting.port(), setting.isEchoMode());
+  start(setting.host(), setting.port());
 }
 
 void CMServer::newConnection()
@@ -87,19 +86,19 @@ void CMServer::disconnect()
     ClientInstence *client = mConnections.value(socket, NULL);
 
     if (client) {
-      if ( client->getAccount() != NULL) {
-        mClients.remove(client->getAccount()->name());
+        if ( client->getAccount() != NULL) {
+            mClients.remove(client->getAccount()->name());
+          }
+        mConnections.remove(socket);
+        client->disconect();
+        delete client;
       }
-      mConnections.remove(socket);
-      client->disconect();
-      delete client;
-    }
     socket->deleteLater();
   } catch(...) {
     qDebug() << "Error disconect";
   }
 }
-// TODO CREATE COMMAND FACTORY NEED REFACTORING
+// TODO CREATE COMMAND FACTORY
 void CMServer::readyRead(QByteArray in)
 {
   QWebSocket *socket = dynamic_cast<QWebSocket*>(sender());
@@ -119,189 +118,208 @@ void CMServer::readyRead(QByteArray in)
     stream >> type;
     qDebug() << "TYPE:" << type;
     switch (type) {
-    case MessageType::Auth: {
-      QString name;
-      QString pass;
+      case MessageType::Auth: {
+          QString name;
+          QString pass;
+          qint64 gen = 0, mod = 0, pub = 0;
+          qint64 prvt = 0;
 
-      stream >> name;
-      stream >> pass;
-      bool isValid = false;
+          stream >> name;
+          stream >> pass;
 
-      QByteArray arr;
-      QDataStream out(&arr, QIODevice::WriteOnly);
-      out << quint16(0);
-      out << (int) MessageType::Auth;
+          stream >> gen;
+          stream >> mod;
+          stream >> pub;
 
-      if (mClients.value(name, NULL) == NULL) {
-        Account* acc = mAccounts.value(name, NULL);
-        if (acc != NULL) {
-          if (pass == acc->password()) {
-            client->setAccount(acc);
-            mClients.insert(name, client);
-            isValid = true;
-          }
-        }
+          bool isValid = false;
+
+          QByteArray arr;
+          QDataStream out(&arr, QIODevice::WriteOnly);
+          out << quint16(0);
+          out << (int) MessageType::Auth;
+
+          if (mClients.value(name, NULL) == NULL) {
+              Account* acc = mAccounts.value(name, NULL);
+              if (acc != NULL) {
+                  if (pass == acc->password()) {
+                      client->setAccount(acc);
+                      prvt = client->setKeyData(gen, mod, pub);
+                      mClients.insert(name, client);
+                      isValid = true;
+                    }
+                }
+            }
+
+          out << isValid;
+          if (isValid) {
+              out << prvt;
+            }
+          out.device()->seek(0);
+          out << quint16(arr.size() - sizeof(quint16));
+          client->sendData(arr);
+          if (!isValid)
+            socket->close();
+        } break;
+
+      case MessageType::CallFrame: {
+          CallEntry* call = client->getCall();
+          if (call) {
+              call->sendCallDataToEntry(client, stream);
+            }
+        } break;
+      case MessageType::TextMessage: {
+          MessageInformation msg(stream);
+          ClientInstence *rec = mClients.value(msg.getRecipient(), NULL);
+          if (rec) {
+              QByteArray arr;
+              QDataStream out(&arr, QIODevice::WriteOnly);
+              out.setVersion(QDataStream::Qt_5_9);
+              out << quint16(0);
+
+              ByteArray encOrg = msg.getMessage();
+              ByteArray dec;
+              Aes256::decrypt(client->getKey(), encOrg, dec);
+              ByteArray enc;
+              Aes256::encrypt(rec->getKey(), dec, enc);
+
+              msg.setMessage(enc);
+
+              out << (int) MessageType::TextMessage;
+              msg.saveToStream(out);
+              out.device()->seek(0);
+              out << quint16(arr.size() - sizeof(quint16));
+              rec->sendData(arr);
+            } else {
+              // TODO SAVE HISTORY
+              qDebug() << "OFFLINE USER";
+            }
+        } break;
+      case MessageType::GetUserList: {
+          QList<QString> list = mAccounts.keys();
+          QByteArray arr;
+          QDataStream out(&arr, QIODevice::WriteOnly);
+          out.setVersion(QDataStream::Qt_5_9);
+          out << quint16(0);
+
+          out << (int) MessageType::GetUserList;
+          out << list.size();
+
+          foreach (QString buff, list) {
+              out << buff;
+            }
+
+          out.device()->seek(0);
+          out << quint16(arr.size() - sizeof(quint16));
+
+          socket->sendBinaryMessage(arr);
+        } break;
+      case MessageType::StartCall: {
+          QString recipient;
+          qint64 gen, mod , priv;
+          stream >> recipient;
+          stream >> gen;
+          stream >> mod;
+          stream >> priv;
+
+          QByteArray arr;
+          QDataStream out(&arr, QIODevice::WriteOnly);
+          out.setVersion(QDataStream::Qt_5_9);
+          out << quint16(0);
+
+          out << (int) MessageType::StartCall;
+          out << client->getAccount()->name();
+          out << gen;
+          out << mod;
+          out << priv;
+
+          ClientInstence* rec = mClients.value(recipient, NULL);
+          if (rec != NULL) {
+              out.device()->seek(0);
+              out << quint16(arr.size() - sizeof(quint16));
+
+              rec->sendData(arr);
+
+              CallEntry *entry = new CallEntry(this);
+
+              entry->add(client);
+              entry->add(rec);
+
+              mCalls.append(entry);
+            } else {
+              // TODO SEND ERROR
+            }
+        } break;
+      case MessageType::SuccessCall: {
+          CallEntry *entry = client->getCall();
+          if (entry != NULL) {
+              QByteArray arr;
+              quint64 priv;
+
+              stream >> priv;
+
+              QDataStream out(&arr, QIODevice::WriteOnly);
+              out.setVersion(QDataStream::Qt_5_9);
+              out << quint16(0);
+
+              out << (int) MessageType::SuccessCall;
+              out << client->getAccount()->name();
+              out << priv;
+              out.device()->seek(0);
+              out << quint16(arr.size() - sizeof(quint16));
+
+              entry->getUser(0)->sendData(arr);
+            }
+        } break;
+
+      case MessageType::CanselCall: {
+          CallEntry *entry = client->getCall();
+          if (entry != NULL) {
+              QByteArray arr;
+              QDataStream out(&arr, QIODevice::WriteOnly);
+              out.setVersion(QDataStream::Qt_5_9);
+              out << quint16(0);
+
+              out << (int) MessageType::CanselCall;
+              out << client->getAccount()->name();
+
+              out.device()->seek(0);
+              out << quint16(arr.size() - sizeof(quint16));
+              entry->getUser(0)->sendData(arr);
+
+              mCalls.removeOne(entry);
+
+              entry->destroy();
+              delete entry;
+            }
+        } break;
+
+      case MessageType::EndCall: {
+          CallEntry *entry = client->getCall();
+          if (entry != NULL) {
+              QByteArray arr;
+              QDataStream out(&arr, QIODevice::WriteOnly);
+              out.setVersion(QDataStream::Qt_5_9);
+
+              out << quint16(0);
+              out << (int) MessageType::EndCall;
+              out.device()->seek(0);
+              out << quint16(arr.size() - sizeof(quint16));
+
+              entry->getUser(0)->sendData(arr);
+              entry->getUser(1)->sendData(arr);
+
+              mCalls.removeOne(entry);
+
+              entry->destroy();
+              delete entry;
+            } else {
+
+            }
+        } break;
+      default:
+        // TODO SEND MESSAGE
+        break;
       }
-
-      out << isValid;
-      out.device()->seek(0);
-      out << quint16(arr.size() - sizeof(quint16));
-      client->sendData(arr);
-      if (!isValid)
-        socket->close();
-    } break;
-
-    case MessageType::CallFrame: {
-      CallEntry* call = client->getCall();
-      if (call) {
-        call->sendCallDataToEntry(client, stream);
-      }
-    } break;
-    case MessageType::TextMessage: {
-      MessageInformation msg(stream);
-      ClientInstence *rec = mClients.value(msg.getRecipient(), NULL);
-      if (rec) {
-        QByteArray arr;
-        QDataStream out(&arr, QIODevice::WriteOnly);
-        out.setVersion(QDataStream::Qt_5_9);
-        out << quint16(0);
-
-        out << (int) MessageType::TextMessage;
-        msg.saveToStream(out);
-        out.device()->seek(0);
-        out << quint16(arr.size() - sizeof(quint16));
-
-        rec->sendData(arr);
-      } else {
-        // TODO SAVE HISTORY
-      }
-    } break;
-    case MessageType::GetUserList: {
-      QList<QString> list = mAccounts.keys();
-      QByteArray arr;
-      QDataStream out(&arr, QIODevice::WriteOnly);
-      out.setVersion(QDataStream::Qt_5_9);
-      out << quint16(0);
-
-      out << (int) MessageType::GetUserList;
-      out << list.size();
-
-      foreach (QString buff, list) {
-        out << buff;
-      }
-
-      out.device()->seek(0);
-      out << quint16(arr.size() - sizeof(quint16));
-
-      socket->sendBinaryMessage(arr);
-    } break;
-    case MessageType::StartCall: {
-      QString recipient;
-      qint64 gen, mod , priv;
-      stream >> recipient;
-      stream >> gen;
-      stream >> mod;
-      stream >> priv;
-
-      QByteArray arr;
-      QDataStream out(&arr, QIODevice::WriteOnly);
-      out.setVersion(QDataStream::Qt_5_9);
-      out << quint16(0);
-
-      out << (int) MessageType::StartCall;
-      out << client->getAccount()->name();
-      out << gen;
-      out << mod;
-      out << priv;
-
-      ClientInstence* rec = mClients.value(recipient, NULL);
-      if (rec != NULL) {
-        out.device()->seek(0);
-        out << quint16(arr.size() - sizeof(quint16));
-
-        rec->sendData(arr);
-
-        CallEntry *entry = new CallEntry(this, isEcho);
-
-        entry->add(client);
-        entry->add(rec);
-
-        mCalls.append(entry);
-      } else {
-        // TODO SEND ERROR
-      }
-    } break;
-    case MessageType::SuccessCall: {
-      CallEntry *entry = client->getCall();
-      if (entry != NULL) {
-        QByteArray arr;
-        quint64 priv;
-
-        stream >> priv;
-
-        QDataStream out(&arr, QIODevice::WriteOnly);
-        out.setVersion(QDataStream::Qt_5_9);
-        out << quint16(0);
-
-        out << (int) MessageType::SuccessCall;
-        out << client->getAccount()->name();
-        out << priv;
-        out.device()->seek(0);
-        out << quint16(arr.size() - sizeof(quint16));
-
-        entry->getUser(0)->sendData(arr);
-      }
-    } break;
-
-    case MessageType::CanselCall: {
-      CallEntry *entry = client->getCall();
-      if (entry != NULL) {
-        QByteArray arr;
-        QDataStream out(&arr, QIODevice::WriteOnly);
-        out.setVersion(QDataStream::Qt_5_9);
-        out << quint16(0);
-
-        out << (int) MessageType::CanselCall;
-        out << client->getAccount()->name();
-
-        out.device()->seek(0);
-        out << quint16(arr.size() - sizeof(quint16));
-        entry->getUser(0)->sendData(arr);
-
-        mCalls.removeOne(entry);
-
-        entry->destroy();
-        delete entry;
-      }
-    } break;
-
-    case MessageType::EndCall: {
-      CallEntry *entry = client->getCall();
-      if (entry != NULL) {
-        QByteArray arr;
-        QDataStream out(&arr, QIODevice::WriteOnly);
-        out.setVersion(QDataStream::Qt_5_9);
-
-        out << quint16(0);
-        out << (int) MessageType::EndCall;
-        out.device()->seek(0);
-        out << quint16(arr.size() - sizeof(quint16));
-
-        entry->getUser(0)->sendData(arr);
-        entry->getUser(1)->sendData(arr);
-
-        mCalls.removeOne(entry);
-
-        entry->destroy();
-        delete entry;
-      } else {
-
-      }
-    } break;
-    default:
-      // TODO SEND MESSAGE
-      break;
-    }
   } catch(...) {
     qDebug () << "!!! Error read package";
   }
@@ -312,8 +330,8 @@ void CMServer::updateAccountCache()
   mAccounts.clear();
   QList<Account*> accaunts = mDbAccountCtrl.getAll();
   foreach (Account* acc, accaunts) {
-    mAccounts.insert(acc->name(), acc);
-  }
+      mAccounts.insert(acc->name(), acc);
+    }
 }
 
 void CMServer::sslErrors(QList<QSslError> errs)
