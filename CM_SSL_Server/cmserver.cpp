@@ -26,8 +26,9 @@ CMServer::~CMServer()
   delete mLoger;
 }
 
-void CMServer::start(QString host, int port)
+void CMServer::start(QString host, int port, bool isEcho)
 {
+  this->isEcho = isEcho;
   if (mServer != NULL)
     delete mServer;
 

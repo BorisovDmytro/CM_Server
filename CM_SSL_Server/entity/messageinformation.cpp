@@ -39,7 +39,7 @@ MessageInformation::MessageInformation(QDataStream &stream)
   qDebug() << "ENCRP_SIZE" << rb;
 
   message = ByteArray(rb);
-  for (int i = 0; i < rb; i ++) {
+  for (uint i = 0; i < rb; i ++) {
       message[i] = buffer[i];
     }
 }
