@@ -10,9 +10,9 @@ class CallEntry : public QObject
   Q_OBJECT
 private:
   QList<ClientInstence*> mUsers;
-
+  bool isEcho;
 public:
-  explicit CallEntry(QObject *parent = 0);
+  explicit CallEntry(QObject *parent = 0, bool isEcho = false);
 
   void add(ClientInstence *user);
   void remove(ClientInstence *user);

@@ -46,15 +46,19 @@ private:
   DbConnection        mDbConnection;
   DbAccountController mDbAccountCtrl;
   quint16 m_nNextBlockSize;
+
+  bool isEcho;
 public:
   explicit CMServer(ICMLoger *loger = 0, QObject *parent = 0);
   ~CMServer();
 
-  void start(QString host, int port);
+
   void start(const CMServerSetting &setting, const DbConnectedSetting &dbSetting);
 signals:
 
 private slots:
+  void start(QString host, int port, bool isEcho = false);
+
   void newConnection();
 
   void disconnect();

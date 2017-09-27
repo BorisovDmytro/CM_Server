@@ -8,6 +8,7 @@ class CMServerSetting
 private:
   QString mHost;
   int     mPort;
+  bool    mIsEchoMode;
 public:
   CMServerSetting(const QString &path);
   CMServerSetting();
@@ -20,6 +21,9 @@ public:
 
   int port() const;
   void setPort(int port);
+
+  bool isEchoMode() const;
+  void setIsEchoMode(bool isEchoMode);
 };
 
 #endif // CMSERVERSETTING_H

@@ -23,14 +23,24 @@ void CMServerSetting::setPort(int port)
   mPort = port;
 }
 
+bool CMServerSetting::isEchoMode() const
+{
+    return mIsEchoMode;
+}
+
+void CMServerSetting::setIsEchoMode(bool isEchoMode)
+{
+    mIsEchoMode = isEchoMode;
+}
+
 CMServerSetting::CMServerSetting(const QString &path)
 {
-  load(path);
+    load(path);
 }
 
 CMServerSetting::CMServerSetting()
 {
-
+    
 }
 
 void CMServerSetting::load(const QString &path)
@@ -49,6 +59,7 @@ void CMServerSetting::load(const QString &path)
 
   mHost = obj.value("host").toString();
   mPort = obj.value("port").toInt();
+  mIsEchoMode = obj.value("echo").toBool();
 }
 
 void CMServerSetting::save(const QString &path)
@@ -63,6 +74,7 @@ void CMServerSetting::save(const QString &path)
 
   obj.insert("host", mHost);
   obj.insert("port", mPort);
+  obj.insert("echo", mIsEchoMode);
 
   QJsonDocument doc(obj);
   QByteArray data = doc.toJson();

@@ -2,10 +2,8 @@
 
 #include <QDebug>
 
-CallEntry::CallEntry(QObject *parent) : QObject(parent)
-{
-
-}
+CallEntry::CallEntry(QObject *parent, bool isEcho)
+  : QObject(parent), isEcho(isEcho) {}
 
 void CallEntry::add(ClientInstence *user)
 {
@@ -71,7 +69,8 @@ void CallEntry::sendCallDataToEntry(ClientInstence *sender, QDataStream &stream)
   out << quint16(arr.size() - sizeof(quint16));
 
   foreach (ClientInstence *user, mUsers) {
-    //if (sender == user) continue;
+    if (sender == user)
+      continue;
     user->sendData(arr);
   }
 }
